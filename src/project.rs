@@ -11,9 +11,6 @@ use std::{
     time::SystemTime,
 };
 
-// TODO : Maybe make methods consume the object for ProjectManager
-// TODO : make sure much memory isn't used by program process when starting a new shell ProjectManager.exec(cmd)
-
 const PROJECT_FILE: &str = ".project.json";
 
 pub enum SortOrder {
@@ -42,7 +39,7 @@ impl Project {
     pub fn get_tags(&self) -> HashSet<String> {
         self.tags.clone()
     }
-    pub fn get_name(&self) -> &String{
+    pub fn get_name(&self) -> &String {
         &self.name
     }
     fn rename(&mut self, name: String) {
@@ -143,6 +140,7 @@ impl ProjectManager {
         self.tags.insert(tag);
     }
     pub fn create(&mut self, project: Project) -> Result<(), String> {
+        // TODO : add PROJECT_FILE to gitignore
         if let Ok(_) = self.get_mut_project(&project.name) {
             return Err(format!(
                 "A project with name '{}' already exists",
@@ -182,7 +180,7 @@ impl ProjectManager {
         project.save(path)?;
         Ok(())
     }
-    pub fn exec(&mut self, name: &str, cmd: &str) -> Result<(), String> {
+    pub fn exec(mut self, name: &str, cmd: &str) -> Result<(), String> {
         let path: PathBuf = self.get_path(name);
         let project = self.get_mut_project(name)?;
 
@@ -190,6 +188,12 @@ impl ProjectManager {
         project.save(path.clone())?;
 
         if cmd == "" {
+            // we will start $SHELL in project directory and this current
+            // rust program is going to wait until we leave the shell.
+            // so i'm going to drop some values that might use some memory
+            drop(project);
+            drop(self);
+
             Command::new(env::var("SHELL").expect("Couldn't get default shell from $SHELL"))
                 .current_dir(&path)
                 .spawn()

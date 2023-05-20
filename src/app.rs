@@ -80,41 +80,41 @@ fn choose_tags(manager: &mut ProjectManager, tags: &mut HashSet<String>) {
     }
 }
 
-fn create(manager: &mut ProjectManager, args: &ArgMatches) {
+fn create(mut manager: ProjectManager, args: &ArgMatches) {
     let mut tags = HashSet::<String>::new();
     let name: &String = args.get_one::<String>("project-name").unwrap();
     if let Ok(_) = manager.get_mut_project(name) {
         eprintln!("Such project already exists");
         return;
     }
-    choose_tags(manager, &mut tags);
+    choose_tags(&mut manager, &mut tags);
     let project = Project::new(name.to_owned(), SystemTime::now(), tags);
     handle_result(manager.create(project));
 }
 
-fn rename(manager: &mut ProjectManager, args: &ArgMatches) {
+fn rename(mut manager: ProjectManager, args: &ArgMatches) {
     handle_result(manager.rename(
         args.get_one::<String>("project-name").unwrap(),
         args.get_one::<String>("new-name").unwrap(),
     ));
 }
 
-fn modify(manager: &mut ProjectManager, args: &ArgMatches) {
+fn modify(mut manager: ProjectManager, args: &ArgMatches) {
     let name = args.get_one::<String>("project-name").unwrap();
     let project = handle_result(manager.get_mut_project(name));
     let mut tags = project.get_tags();
-    choose_tags(manager, &mut tags);
+    choose_tags(&mut manager, &mut tags);
     handle_result(manager.modify(name, tags));
 }
 
-fn exec(manager: &mut ProjectManager, args: &ArgMatches) {
+fn exec(manager: ProjectManager, args: &ArgMatches) {
     handle_result(manager.exec(
         args.get_one::<String>("project-name").unwrap(),
         args.get_one::<String>("command").unwrap(),
     ));
 }
 
-fn search(manager: &mut ProjectManager, args: &ArgMatches) {
+fn search(mut manager: ProjectManager, args: &ArgMatches) {
     let order = match true {
         true if args.get_flag("created") => SortOrder::Creation,
         true if args.get_flag("name") => SortOrder::Name,
@@ -133,7 +133,7 @@ fn search(manager: &mut ProjectManager, args: &ArgMatches) {
         true if args.get_flag("modify") => {
             let name = res.get_name();
             let mut tags = res.get_tags();
-            choose_tags(manager, &mut tags);
+            choose_tags(&mut manager, &mut tags);
             handle_result(manager.modify(name, tags))
         }
         // default to exec
@@ -142,14 +142,14 @@ fn search(manager: &mut ProjectManager, args: &ArgMatches) {
 }
 
 pub fn handle(root: &str, macthes: ArgMatches) {
-    let mut manager = ProjectManager::load(Path::new(root).to_owned());
+    let manager = ProjectManager::load(Path::new(root).to_owned());
     if let Some((subcommand, args)) = macthes.subcommand() {
         match subcommand {
-            "create" => create(&mut manager, args),
-            "rename" => rename(&mut manager, args),
-            "modify" => modify(&mut manager, args),
-            "exec" => exec(&mut manager, args),
-            "find" => search(&mut manager, args),
+            "create" => create(manager, args),
+            "rename" => rename(manager, args),
+            "modify" => modify(manager, args),
+            "exec" => exec(manager, args),
+            "find" => search(manager, args),
             _ => panic!("such subcommand({}) doesn't exist", subcommand),
         };
     }
