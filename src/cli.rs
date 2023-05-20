@@ -3,7 +3,12 @@ use clap::{command, Arg, ArgAction, ArgGroup, Command};
 // TODO : exec last accessed project when no arguement is passed for exec subcommand
 macro_rules! project_arg {
     ($name:tt,$help:tt) => {
-        Arg::new($name).num_args(1).help($help).required(true)
+        Arg::new($name).num_args(1).help($help).required(true).value_parser(|name: &str| -> Result<String, &str>{
+            if name.ends_with("/"){
+                return Ok(name.strip_suffix("/").unwrap().to_owned())
+            }
+            Ok(name.to_owned())
+        })
     };
 }
 macro_rules! find_flag {

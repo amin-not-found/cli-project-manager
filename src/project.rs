@@ -118,7 +118,7 @@ impl ProjectManager {
     }
     pub fn get_mut_project(&mut self, name: &str) -> Result<&mut Project, String> {
         let project = self.projects.iter_mut().find(|p| p.name == name);
-        if let None = project {
+        if project.is_none() {
             return Err(format!("Such project({}) doesn't exist", name));
         }
 
@@ -141,7 +141,7 @@ impl ProjectManager {
     }
     pub fn create(&mut self, project: Project) -> Result<(), String> {
         // TODO : add PROJECT_FILE to gitignore
-        if let Ok(_) = self.get_mut_project(&project.name) {
+        if self.get_mut_project(&project.name).is_ok() {
             return Err(format!(
                 "A project with name '{}' already exists",
                 project.name
@@ -155,7 +155,7 @@ impl ProjectManager {
         Ok(())
     }
     pub fn rename(&mut self, src: &str, dst: &str) -> Result<(), String> {
-        if let Ok(_) = self.get_mut_project(dst) {
+        if self.get_mut_project(dst).is_ok() {
             return Err(format!("A project with name '{}' already exists", dst));
         }
 

@@ -1,7 +1,7 @@
-mod config;
-pub mod project;
 mod app;
 mod cli;
+mod config;
+mod project;
 
 // TODO : gen completion
 

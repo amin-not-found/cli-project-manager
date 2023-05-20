@@ -52,7 +52,7 @@ fn choose_tags(manager: &mut ProjectManager, tags: &mut HashSet<String>) {
         //let help_msg = tags.clone().into_iter().collect::<Vec<String>>().join(", ");
         let help_msg = "Press Esc to finish";
         println!("current tags: {:?}", tags);
-        let tag = Text::new("Enter a tag to add or remove")
+        let tag = Text::new("Enter a tag to add or remove:")
             .with_help_message(help_msg)
             .with_autocomplete(Suggester::new(manager.get_tags()))
             .with_validator(|tag: &str| {
@@ -75,7 +75,10 @@ fn choose_tags(manager: &mut ProjectManager, tags: &mut HashSet<String>) {
                     tags.insert(tag.to_owned());
                 }
             }
-            None => return,
+            None => {
+                println!("selected tags: {:?}", tags);
+                return;
+            }
         }
     }
 }
@@ -83,7 +86,7 @@ fn choose_tags(manager: &mut ProjectManager, tags: &mut HashSet<String>) {
 fn create(mut manager: ProjectManager, args: &ArgMatches) {
     let mut tags = HashSet::<String>::new();
     let name: &String = args.get_one::<String>("project-name").unwrap();
-    if let Ok(_) = manager.get_mut_project(name) {
+    if manager.get_mut_project(name).is_ok() {
         eprintln!("Such project already exists");
         return;
     }
@@ -124,11 +127,19 @@ fn search(mut manager: ProjectManager, args: &ArgMatches) {
     if args.get_flag("invert") {
         projetcs.reverse();
     }
-    let res = Select::new("Choose a project", projetcs).prompt().unwrap();
+    let res = Select::new("Choose a project:", projetcs)
+        .prompt_skippable()
+        .unwrap();
+    if res.is_none() {
+        return;
+    }
+    let res = res.unwrap();
     match true {
         true if args.get_flag("rename") => {
-            let name = Text::new("New name: ").prompt().unwrap();
-            handle_result(manager.rename(res.get_name(), &name))
+            let temp = Text::new("New name:").prompt_skippable().unwrap();
+            if let Some(name) = temp {
+                handle_result(manager.rename(res.get_name(), &name))
+            }
         }
         true if args.get_flag("modify") => {
             let name = res.get_name();
@@ -137,7 +148,9 @@ fn search(mut manager: ProjectManager, args: &ArgMatches) {
             handle_result(manager.modify(name, tags))
         }
         // default to exec
-        _ => handle_result(manager.exec(res.get_name(), args.get_one::<String>("execute").unwrap())),
+        _ => {
+            handle_result(manager.exec(res.get_name(), args.get_one::<String>("execute").unwrap()))
+        }
     }
 }
 
