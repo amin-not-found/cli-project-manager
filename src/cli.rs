@@ -9,13 +9,12 @@ macro_rules! project_arg {
 macro_rules! find_flag {
     ($name:tt,$help:tt) => {
         Arg::new($name)
-        .help($help)
-        .short($name.chars().next().unwrap())
-        .action(ArgAction::SetTrue)
-        .num_args(0)    
+            .help($help)
+            .short($name.chars().next().unwrap())
+            .action(ArgAction::SetTrue)
+            .num_args(0)
     };
 }
-
 
 pub fn build() -> Command {
     command!()
@@ -52,7 +51,7 @@ pub fn build() -> Command {
                 .about("interactive prompt to look for a project based on name and tags and then do something with it")
                 .arg(find_flag!("invert", "reverse order of projects"))
                 .arg(find_flag!("created", "sort projects by time created"))
-                .arg(find_flag!("accessed", "sort projects by last time accesed using this program"))
+                .arg(find_flag!("accessed", "sort projects by last time accesed using this program(default option)"))
                 .arg(find_flag!("name","sort projects by name"))
                 .group(
                     ArgGroup::new("order").args(["created","accessed","name"]).required(false).multiple(false)
@@ -61,12 +60,11 @@ pub fn build() -> Command {
                 .arg(find_flag!("modify", "modify tags of selected project"))
                 .arg(Arg::new("execute")
                     .short('e')
-                    .help("execute command in selected project directory(runs $SHELL by if not passed)")
+                    .help("execute command in selected project directory(runs $SHELL if not specified. is default action)")
                     .num_args(1)
-                    .required(false).default_missing_value(""))
+                    .required(false).default_value(""))
                 .group(
-                    ArgGroup::new("action").args(["rename","modify","execute"]),
-                ),
-                
-    ).after_help("Note: to delete a project, just delete the directory contining it")
+                    ArgGroup::new("action").args(["rename","modify","execute"]).required(false).multiple(false))  
+                .after_help("note: defaults to -Fae $SHELL as specified above"))
+            .after_help("Note: to delete a project, just delete the directory contining it")
 }

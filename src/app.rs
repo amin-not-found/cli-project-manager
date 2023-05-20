@@ -1,9 +1,9 @@
-use std::{collections::HashSet, path::Path, time::SystemTime, process::exit};
+use std::{collections::HashSet, path::Path, process::exit, time::SystemTime};
 
 use clap::ArgMatches;
-use inquire::{autocompletion::Replacement, validator::Validation, Autocomplete, Text};
+use inquire::{autocompletion::Replacement, validator::Validation, Autocomplete, Select, Text};
 
-use crate::project::{Project, ProjectManager};
+use crate::project::{Project, ProjectManager, SortOrder};
 
 #[derive(Clone)]
 struct Suggester {
@@ -37,23 +37,23 @@ impl Autocomplete for Suggester {
     }
 }
 
-fn handle_result<T>(res: Result<T, String>) -> T{
-    match res{
+fn handle_result<T>(res: Result<T, String>) -> T {
+    match res {
         Err(e) => {
-            {
-                eprintln!("ERROR: {}", e);
-                exit(-1)
-            }
-        },
-        Ok(value) => value 
+            eprintln!("ERROR: {}", e);
+            exit(-1)
+        }
+        Ok(value) => value,
     }
 }
 
 fn choose_tags(manager: &mut ProjectManager, tags: &mut HashSet<String>) {
     loop {
+        //let help_msg = tags.clone().into_iter().collect::<Vec<String>>().join(", ");
+        let help_msg = "Press Esc to finish";
         println!("current tags: {:?}", tags);
-        let tag = Text::new("Enter a tag to add or remove:")
-            .with_help_message("prss ESC to finish")
+        let tag = Text::new("Enter a tag to add or remove")
+            .with_help_message(help_msg)
             .with_autocomplete(Suggester::new(manager.get_tags()))
             .with_validator(|tag: &str| {
                 if tag.contains(char::is_whitespace) {
@@ -114,6 +114,33 @@ fn exec(manager: &mut ProjectManager, args: &ArgMatches) {
     ));
 }
 
+fn search(manager: &mut ProjectManager, args: &ArgMatches) {
+    let order = match true {
+        true if args.get_flag("created") => SortOrder::Creation,
+        true if args.get_flag("name") => SortOrder::Name,
+        _ => SortOrder::AccessTime,
+    };
+    let mut projetcs = manager.get_projects(order);
+    if args.get_flag("invert") {
+        projetcs.reverse();
+    }
+    let res = Select::new("Choose a project", projetcs).prompt().unwrap();
+    match true {
+        true if args.get_flag("rename") => {
+            let name = Text::new("New name: ").prompt().unwrap();
+            handle_result(manager.rename(res.get_name(), &name))
+        }
+        true if args.get_flag("modify") => {
+            let name = res.get_name();
+            let mut tags = res.get_tags();
+            choose_tags(manager, &mut tags);
+            handle_result(manager.modify(name, tags))
+        }
+        // default to exec
+        _ => handle_result(manager.exec(res.get_name(), args.get_one::<String>("execute").unwrap())),
+    }
+}
+
 pub fn handle(root: &str, macthes: ArgMatches) {
     let mut manager = ProjectManager::load(Path::new(root).to_owned());
     if let Some((subcommand, args)) = macthes.subcommand() {
@@ -122,8 +149,8 @@ pub fn handle(root: &str, macthes: ArgMatches) {
             "rename" => rename(&mut manager, args),
             "modify" => modify(&mut manager, args),
             "exec" => exec(&mut manager, args),
-            "search" => (),
-            _ => (),
+            "find" => search(&mut manager, args),
+            _ => panic!("such subcommand({}) doesn't exist", subcommand),
         };
     }
 }

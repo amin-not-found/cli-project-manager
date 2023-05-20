@@ -1,22 +1,28 @@
 use core::panic;
+use serde::{Deserialize, Serialize};
 use std::{
+    cmp::Reverse,
     collections::HashSet,
     env::{self},
+    fmt::Display,
     fs,
     path::PathBuf,
     process::Command,
     time::SystemTime,
 };
 
-
 // TODO : Maybe make methods consume the object for ProjectManager
 // TODO : make sure much memory isn't used by program process when starting a new shell ProjectManager.exec(cmd)
 
-use serde::{Deserialize, Serialize};
-
 const PROJECT_FILE: &str = ".project.json";
 
-#[derive(Serialize, Deserialize)]
+pub enum SortOrder {
+    Creation,
+    AccessTime,
+    Name,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Project {
     name: String,
     created: SystemTime,
@@ -36,6 +42,9 @@ impl Project {
     pub fn get_tags(&self) -> HashSet<String> {
         self.tags.clone()
     }
+    pub fn get_name(&self) -> &String{
+        &self.name
+    }
     fn rename(&mut self, name: String) {
         self.name = name
     }
@@ -48,17 +57,31 @@ impl Project {
             serde_json::to_string(self).unwrap(),
         );
         if let Err(e) = res {
-            return Err(e.to_string());        
+            return Err(e.to_string());
         }
         return Ok(());
     }
 }
 
-pub struct ProjectManager{
+impl Display for Project {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}: {}",
+            self.name,
+            self.tags
+                .clone()
+                .into_iter()
+                .collect::<Vec<String>>()
+                .join(", ")
+        )
+    }
+}
+
+pub struct ProjectManager {
     root: PathBuf,
     projects: Vec<Project>,
-    tags: HashSet<String>
-    
+    tags: HashSet<String>,
 }
 
 impl ProjectManager {
@@ -103,6 +126,15 @@ impl ProjectManager {
         }
 
         Ok(project.unwrap())
+    }
+    pub fn get_projects(&self, order: SortOrder) -> Vec<Project> {
+        let mut res = self.projects.clone();
+        match order {
+            SortOrder::Creation => res.sort_by_key(|p| Reverse(p.created)),
+            SortOrder::AccessTime => res.sort_by_key(|p| Reverse(p.accessed)),
+            SortOrder::Name => res.sort_by_key(|p| p.name.clone()),
+        };
+        res
     }
     pub fn get_tags(&self) -> HashSet<String> {
         self.tags.clone()
@@ -153,9 +185,13 @@ impl ProjectManager {
     pub fn exec(&mut self, name: &str, cmd: &str) -> Result<(), String> {
         let path: PathBuf = self.get_path(name);
         let project = self.get_mut_project(name)?;
+
+        project.accessed = SystemTime::now();
+        project.save(path.clone())?;
+
         if cmd == "" {
             Command::new(env::var("SHELL").expect("Couldn't get default shell from $SHELL"))
-                .current_dir("/home/amin/Codings")
+                .current_dir(&path)
                 .spawn()
                 .unwrap()
                 .wait()
@@ -166,8 +202,6 @@ impl ProjectManager {
                 .spawn()
                 .unwrap();
         }
-        project.accessed = SystemTime::now();
-        project.save(path)?;
         Ok(())
     }
 }

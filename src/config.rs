@@ -4,6 +4,8 @@ pub struct Config {
 
 impl Config {
     pub fn default() -> Config {
-        Config { root: "/home/amin/Codings" }
+        Config {
+            root: "/home/amin/Coding",
+        }
     }
 }

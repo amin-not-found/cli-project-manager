@@ -2,13 +2,11 @@
 name = "cli-project-manager"
 description = "Manage folders of projects in your terminal."
 authors = ["Amin <amin83ghasemi@gmail.com"]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 [dependencies]
 clap = {version = "4.2.7", features = ["cargo"]}
-console = "0.15.5"
-dialoguer = {version = "0.10.4", features = ["completion", "fuzzy-select","history"]}
 inquire = "0.6.2"
 serde = {version = "1.0.163", features = ["derive"]}
 serde_json = "1.0.96"
