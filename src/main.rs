@@ -6,6 +6,7 @@ mod project;
 // TODO : gen completion
 
 fn main() {
+    // TODO : make config customizable
     let conf = config::Config::default();
     let matches = cli::build().get_matches();
     app::handle(conf.root, matches);

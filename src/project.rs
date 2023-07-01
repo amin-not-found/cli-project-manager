@@ -6,11 +6,12 @@ use std::{
     env::{self},
     fmt::Display,
     fs,
+    io::Write,
     path::PathBuf,
     process::Command,
     time::SystemTime,
 };
-
+// TODO : make sure search works with substrings
 const PROJECT_FILE: &str = ".project.json";
 
 pub enum SortOrder {
@@ -140,7 +141,6 @@ impl ProjectManager {
         self.tags.insert(tag);
     }
     pub fn create(&mut self, project: Project) -> Result<(), String> {
-        // TODO : add PROJECT_FILE to gitignore
         if self.get_mut_project(&project.name).is_ok() {
             return Err(format!(
                 "A project with name '{}' already exists",
@@ -151,6 +151,12 @@ impl ProjectManager {
         if !path.is_dir() {
             fs::create_dir(&path).unwrap();
         }
+        let mut gitignore = fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(path.join(path.join(".gitignore")))
+            .unwrap();
+        writeln!(gitignore, "{}", PROJECT_FILE).unwrap();
         project.save(path)?;
         Ok(())
     }
