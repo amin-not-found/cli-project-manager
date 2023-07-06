@@ -207,8 +207,11 @@ impl ProjectManager {
                 .wait()
                 .unwrap();
         } else {
-            Command::new(cmd)
-                .current_dir("/home/amin/Codings")
+            let cmd = cmd.replace("{}", &path.to_string_lossy());
+            let cmd: Vec<&str> = cmd.split(' ').collect();
+            Command::new(&cmd[0])
+                .args(&cmd[1..])
+                .current_dir(&path)
                 .spawn()
                 .unwrap();
         }
