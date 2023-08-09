@@ -197,7 +197,6 @@ impl ProjectManager {
             // we will start $SHELL in project directory and this current
             // rust program is going to wait until we leave the shell.
             // so i'm going to drop some values that might use some memory
-            drop(project);
             drop(self);
 
             Command::new(env::var("SHELL").expect("Couldn't get default shell from $SHELL"))
