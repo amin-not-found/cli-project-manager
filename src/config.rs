@@ -12,7 +12,7 @@ impl Config {
             .expect("Couldn't retrieve config location for your system")
             .join("cli-project-manager.json");
 
-        let config_text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("Coun't open file {:?}:\n{}", &path, e));
+        let config_text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("Couldn't open file {:?}:\n{}", &path, e));
 
         serde_json::from_str(&config_text).unwrap()
     }

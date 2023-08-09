@@ -12,7 +12,7 @@ struct Suggester {
 
 impl Suggester {
     pub fn new(tags: HashSet<String>) -> Self {
-        Suggester { tags: tags }
+        Suggester { tags }
     }
 }
 
@@ -29,10 +29,10 @@ impl Autocomplete for Suggester {
         &mut self,
         _: &str,
         highlighted_suggestion: Option<String>,
-    ) -> Result<inquire::autocompletion::Replacement, inquire::CustomUserError> {
+    ) -> Result<Replacement, inquire::CustomUserError> {
         Ok(match highlighted_suggestion {
-            Some(suggestion) => Replacement::Some(suggestion),
-            None => Replacement::None,
+            Some(suggestion) => Some(suggestion),
+            None => None,
         })
     }
 }
@@ -123,11 +123,11 @@ fn search(mut manager: ProjectManager, args: &ArgMatches) {
         true if args.get_flag("name") => SortOrder::Name,
         _ => SortOrder::AccessTime,
     };
-    let mut projetcs = manager.get_projects(order);
+    let mut projects = manager.get_projects(order);
     if args.get_flag("invert") {
-        projetcs.reverse();
+        projects.reverse();
     }
-    let res = Select::new("Choose a project:", projetcs)
+    let res = Select::new("Choose a project:", projects)
         .prompt_skippable()
         .unwrap();
     if res.is_none() {
@@ -154,9 +154,9 @@ fn search(mut manager: ProjectManager, args: &ArgMatches) {
     }
 }
 
-pub fn handle(root: &str, macthes: ArgMatches) {
+pub fn handle(root: &str, matches: ArgMatches) {
     let manager = ProjectManager::load(Path::new(root).to_owned());
-    if let Some((subcommand, args)) = macthes.subcommand() {
+    if let Some((subcommand, args)) = matches.subcommand() {
         match subcommand {
             "create" => create(manager, args),
             "rename" => rename(manager, args),

@@ -104,7 +104,7 @@ impl ProjectManager {
                     tags.extend(p.tags.clone());
                     projects.push(p);
                 } else {
-                    println!("WARINING: broken {} at {:?}", PROJECT_FILE, entry);
+                    println!("WARNING: broken {} at {:?}", PROJECT_FILE, entry);
                 }
             }
         }
