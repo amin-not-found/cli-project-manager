@@ -7,7 +7,7 @@ mod project;
 
 fn main() {
     // TODO : make config customizable
-    let conf = config::Config::default();
+    let conf = config::Config::new();
     let matches = cli::build().get_matches();
-    app::handle(conf.root, matches);
+    app::handle(&conf.dir, matches);
 }
