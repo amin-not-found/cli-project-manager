@@ -87,7 +87,7 @@ impl ProjectManager {
         let mut projects = Vec::<Project>::new();
         let mut tags = HashSet::<String>::new();
         if !path.is_dir() {
-            panic!("Root directory not found or not a directory!");
+            panic!("Root directory({path:?}) not found or not a directory!");
         }
 
         for entry in fs::read_dir(&path).unwrap() {
@@ -98,7 +98,9 @@ impl ProjectManager {
                     .unwrap()
                     .any(|f| f.unwrap().file_name() == PROJECT_FILE)
             {
-                let data = fs::read_to_string(entry.join(PROJECT_FILE)).unwrap();
+                let data = fs::read_to_string(entry.join(PROJECT_FILE)).unwrap_or_else(|e| {
+                    panic!("Couldn't read {} in {:?}: {}", PROJECT_FILE, entry, e)
+                });
                 let project = serde_json::from_str::<Project>(&data);
                 if let Ok(p) = project {
                     tags.extend(p.tags.clone());
@@ -173,7 +175,7 @@ impl ProjectManager {
         new_path.pop();
         new_path = new_path.join(&dst);
 
-        fs::rename(path.clone(), &new_path).unwrap();
+        fs::rename(path.clone(), &new_path).unwrap_or_else(|e| panic!("Couldn't rename {:?} to {:?}.\n{}", &path, &new_path, e));
         project.rename(dst.to_string());
         project.save(new_path)?;
         self.projects.push(project);
