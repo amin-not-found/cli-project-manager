@@ -57,7 +57,7 @@ impl Project {
         if let Err(e) = res {
             return Err(e.to_string());
         }
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -173,7 +173,7 @@ impl ProjectManager {
         let path: PathBuf = self.get_path(src);
         let mut new_path = path.clone();
         new_path.pop();
-        new_path = new_path.join(&dst);
+        new_path = new_path.join(dst);
 
         fs::rename(path.clone(), &new_path).unwrap_or_else(|e| panic!("Couldn't rename {:?} to {:?}.\n{}", &path, &new_path, e));
         project.rename(dst.to_string());
@@ -195,7 +195,7 @@ impl ProjectManager {
         project.accessed = SystemTime::now();
         project.save(path.clone())?;
 
-        if cmd == "" {
+        if cmd.is_empty() {
             // we will start $SHELL in project directory and this current
             // rust program is going to wait until we leave the shell.
             // so i'm going to drop some values that might use some memory
@@ -210,7 +210,7 @@ impl ProjectManager {
         } else {
             let cmd = cmd.replace("{}", &path.to_string_lossy());
             let cmd: Vec<&str> = cmd.split(' ').collect();
-            Command::new(&cmd[0])
+            Command::new(cmd[0])
                 .args(&cmd[1..])
                 .current_dir(&path)
                 .spawn()

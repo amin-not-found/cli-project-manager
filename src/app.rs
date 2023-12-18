@@ -30,10 +30,7 @@ impl Autocomplete for Suggester {
         _: &str,
         highlighted_suggestion: Option<String>,
     ) -> Result<Replacement, inquire::CustomUserError> {
-        Ok(match highlighted_suggestion {
-            Some(suggestion) => Some(suggestion),
-            None => None,
-        })
+        Ok(highlighted_suggestion)
     }
 }
 
