@@ -1,3 +1,4 @@
+// TODO : make sure search works with substrings
 use core::panic;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -9,10 +10,24 @@ use std::{
     io::Write,
     path::PathBuf,
     process::Command,
-    time::SystemTime,
 };
-// TODO : make sure search works with substrings
+use time::{
+    format_description::well_known::{
+        iso8601::{self, TimePrecision},
+        Iso8601,
+    },
+    OffsetDateTime,
+};
+
 const PROJECT_FILE: &str = ".project.json";
+const TIME_CONFIG: iso8601::EncodedConfig = iso8601::Config::DEFAULT
+    .set_year_is_six_digits(false)
+    .set_time_precision(TimePrecision::Second {
+        decimal_digits: std::num::NonZeroU8::new(7),
+    })
+    .encode();
+const TIME_FORMAT: Iso8601<TIME_CONFIG> = Iso8601::<TIME_CONFIG>;
+time::serde::format_description!(time_format, OffsetDateTime, TIME_FORMAT);
 
 pub enum SortOrder {
     Creation,
@@ -23,13 +38,15 @@ pub enum SortOrder {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Project {
     name: String,
-    created: SystemTime,
-    accessed: SystemTime,
+    #[serde(with = "time_format")]
+    created: OffsetDateTime,
+    #[serde(with = "time_format")]
+    accessed: OffsetDateTime,
     tags: HashSet<String>,
 }
 
 impl Project {
-    pub fn new(name: String, created_time: SystemTime, tags: HashSet<String>) -> Self {
+    pub fn new(name: String, created_time: OffsetDateTime, tags: HashSet<String>) -> Self {
         Project {
             name,
             created: created_time,
@@ -175,7 +192,8 @@ impl ProjectManager {
         new_path.pop();
         new_path = new_path.join(dst);
 
-        fs::rename(path.clone(), &new_path).unwrap_or_else(|e| panic!("Couldn't rename {:?} to {:?}.\n{}", &path, &new_path, e));
+        fs::rename(path.clone(), &new_path)
+            .unwrap_or_else(|e| panic!("Couldn't rename {:?} to {:?}.\n{}", &path, &new_path, e));
         project.rename(dst.to_string());
         project.save(new_path)?;
         self.projects.push(project);
@@ -192,7 +210,7 @@ impl ProjectManager {
         let path: PathBuf = self.get_path(name);
         let project = self.get_mut_project(name)?;
 
-        project.accessed = SystemTime::now();
+        project.accessed = OffsetDateTime::now_utc();
         project.save(path.clone())?;
 
         if cmd.is_empty() {
