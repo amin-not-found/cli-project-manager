@@ -4,7 +4,10 @@ use clap::ArgMatches;
 use inquire::{autocompletion::Replacement, validator::Validation, Autocomplete, Select, Text};
 use time::OffsetDateTime;
 
-use crate::project::{Project, ProjectManager, SortOrder};
+use crate::{
+    config::Config,
+    project::{Project, ProjectManager, SortOrder},
+};
 
 #[derive(Clone)]
 struct Suggester {
@@ -108,14 +111,15 @@ fn modify(mut manager: ProjectManager, args: &ArgMatches) {
     handle_result(manager.modify(name, tags));
 }
 
-fn exec(manager: ProjectManager, args: &ArgMatches) {
+fn exec(manager: ProjectManager, default_executor: String, args: &ArgMatches) {
     handle_result(manager.exec(
         args.get_one::<String>("project-name").unwrap(),
+        default_executor,
         args.get_one::<String>("command").unwrap(),
     ));
 }
 
-fn search(mut manager: ProjectManager, args: &ArgMatches) {
+fn search(mut manager: ProjectManager, default_executor: String, args: &ArgMatches) {
     let order = match true {
         true if args.get_flag("created") => SortOrder::Creation,
         true if args.get_flag("name") => SortOrder::Name,
@@ -125,6 +129,7 @@ fn search(mut manager: ProjectManager, args: &ArgMatches) {
     if args.get_flag("invert") {
         projects.reverse();
     }
+    // TODO : Handle case of no projects which results in inquire panicking
     let res = Select::new("Choose a project:", projects)
         .prompt_skippable()
         .unwrap();
@@ -146,21 +151,23 @@ fn search(mut manager: ProjectManager, args: &ArgMatches) {
             handle_result(manager.modify(name, tags))
         }
         // default to exec
-        _ => {
-            handle_result(manager.exec(res.get_name(), args.get_one::<String>("execute").unwrap()))
-        }
+        _ => handle_result(manager.exec(
+            res.get_name(),
+            default_executor,
+            args.get_one::<String>("execute").unwrap(),
+        )),
     }
 }
 
-pub fn handle(root: &str, matches: ArgMatches) {
-    let manager = ProjectManager::load(Path::new(root).to_owned());
+pub fn handle(conf: Config, matches: ArgMatches) {
+    let manager = ProjectManager::load(Path::new(&conf.dir).to_owned());
     if let Some((subcommand, args)) = matches.subcommand() {
         match subcommand {
             "create" => create(manager, args),
             "rename" => rename(manager, args),
             "modify" => modify(manager, args),
-            "exec" => exec(manager, args),
-            "find" => search(manager, args),
+            "exec" => exec(manager, conf.exec, args),
+            "find" => search(manager, conf.exec, args),
             _ => panic!("such subcommand({}) doesn't exist", subcommand),
         };
     }

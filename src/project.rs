@@ -2,13 +2,7 @@
 use core::panic;
 use serde::{Deserialize, Serialize};
 use std::{
-    cmp::Reverse,
-    collections::HashSet,
-    env::{self},
-    fmt::Display,
-    fs,
-    io::Write,
-    path::PathBuf,
+    cmp::Reverse, collections::HashSet, fmt::Display, fs, io::Write, path::PathBuf,
     process::Command,
 };
 use time::{
@@ -206,34 +200,32 @@ impl ProjectManager {
         project.save(path)?;
         Ok(())
     }
-    pub fn exec(mut self, name: &str, cmd: &str) -> Result<(), String> {
+    pub fn exec(mut self, name: &str, default_executor: String, cmd: &str) -> Result<(), String> {
+        let mut cmd = cmd;
         let path: PathBuf = self.get_path(name);
         let project = self.get_mut_project(name)?;
 
         project.accessed = OffsetDateTime::now_utc();
         project.save(path.clone())?;
 
-        if cmd.is_empty() {
-            // we will start $SHELL in project directory and this current
-            // rust program is going to wait until we leave the shell.
-            // so i'm going to drop some values that might use some memory
-            drop(self);
+        // we will start a program in project directory and this current
+        // rust program might need to wait until the program finishes. so
+        // i'm going to drop projects data just in case it uses too much memory
+        drop(self);
 
-            Command::new(env::var("SHELL").expect("Couldn't get default shell from $SHELL"))
-                .current_dir(&path)
-                .spawn()
-                .unwrap()
-                .wait()
-                .unwrap();
-        } else {
-            let cmd = cmd.replace("{}", &path.to_string_lossy());
-            let cmd: Vec<&str> = cmd.split(' ').collect();
-            Command::new(cmd[0])
-                .args(&cmd[1..])
-                .current_dir(&path)
-                .spawn()
-                .unwrap();
+        if cmd.is_empty() {
+            cmd = &default_executor;
         }
+        let cmd = cmd.replace("{}", &path.to_string_lossy());
+        let cmd: Vec<&str> = cmd.split(' ').collect();
+        Command::new(cmd[0])
+            .args(&cmd[1..])
+            .current_dir(&path)
+            .spawn()
+            .unwrap()
+            .wait()
+            .unwrap();
+
         Ok(())
     }
 }

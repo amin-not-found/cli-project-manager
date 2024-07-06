@@ -1,14 +1,18 @@
-use clap::{Arg, ArgAction, ArgGroup, command, Command};
+use clap::{command, Arg, ArgAction, ArgGroup, Command};
 
 // TODO : exec last accessed project when no argument is passed for exec subcommand
 macro_rules! project_arg {
     ($name:tt,$help:tt) => {
-        Arg::new($name).num_args(1).help($help).required(true).value_parser(|name: &str| -> Result<String, &str>{
-            if name.ends_with("/"){
-                return Ok(name.strip_suffix("/").unwrap().to_owned())
-            }
-            Ok(name.to_owned())
-        })
+        Arg::new($name)
+            .num_args(1)
+            .help($help)
+            .required(true)
+            .value_parser(|name: &str| -> Result<String, &str> {
+                if name.ends_with("/") {
+                    return Ok(name.strip_suffix("/").unwrap().to_owned());
+                }
+                Ok(name.to_owned())
+            })
     };
 }
 macro_rules! find_flag {
@@ -45,7 +49,7 @@ pub fn build() -> Command {
             .about("Execute in a project")
             .short_flag('E')
             .arg(Arg::new("command")
-                .short('c').help("command to execute in project directory. runs $SHELL by default")
+                .short('c').help("command to execute in project directory. runs program specified in config(exec value)")
                 .required(false)
                 .num_args(1)
                 .default_value(""))
@@ -65,11 +69,10 @@ pub fn build() -> Command {
             .arg(find_flag!("modify", "modify tags of selected project"))
             .arg(Arg::new("execute")
                 .short('e')
-                .help("execute command in selected project directory(runs $SHELL if not specified. is default action)")
+                .help("execute command in selected project directory(runs program specified in config if not specified. is default action)")
                 .num_args(1)
                 .required(false).default_value(""))
             .group(
-                ArgGroup::new("action").args(["rename", "modify", "execute"]).required(false).multiple(false))
-            .after_help("note: defaults to -Fae $SHELL as specified above"))
+                ArgGroup::new("action").args(["rename", "modify", "execute"]).required(false).multiple(false)))
         .after_help("Note: to delete a project, just delete the directory containing it")
 }

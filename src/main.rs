@@ -9,5 +9,5 @@ fn main() {
     // TODO : make config customizable
     let conf = config::Config::new();
     let matches = cli::build().get_matches();
-    app::handle(&conf.dir, matches);
+    app::handle(conf, matches);
 }

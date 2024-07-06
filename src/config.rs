@@ -2,7 +2,8 @@ use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
 pub struct Config {
-    pub dir: String,
+    pub dir: String, // root directory
+    pub exec: String, // default program to execute/open projects with
 }
 
 impl Config {
