@@ -1,5 +1,4 @@
 // TODO : make sure search works with substrings
-use core::panic;
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::Reverse, collections::HashSet, fmt::Display, fs, io::Write, path::PathBuf,
@@ -44,31 +43,26 @@ pub enum SortOrder {
     Name,
 }
 
-fn default_project_atime() -> OffsetDateTime {
-    OffsetDateTime::UNIX_EPOCH
-}
-
 fn empty_hash_set() -> HashSet<String> {
     HashSet::new()
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ProjectInfo {
-    #[serde(default = "default_project_atime")]
-    #[serde(with = "time_format")]
-    accessed: OffsetDateTime,
+pub struct ProjectData {
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(with = "time_format::option")]
+    created: Option<OffsetDateTime>,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(with = "time_format::option")]
+    accessed: Option<OffsetDateTime>,
     #[serde(default = "empty_hash_set")]
     tags: HashSet<String>,
 }
 
-impl ProjectInfo {
-    pub fn new(accessed_time: OffsetDateTime, tags: HashSet<String>) -> Self {
-        ProjectInfo {
-            accessed: accessed_time,
-            tags,
-        }
-    }
-    pub fn save(&self, path: PathBuf) -> Result<(), ProjectError> {
+impl ProjectData {
+    fn save(&self, path: PathBuf) -> Result<(), ProjectError> {
         let res = fs::write(
             path.join(PROJECT_FILE),
             serde_json::to_string(self).unwrap(),
@@ -86,27 +80,28 @@ impl ProjectInfo {
 #[derive(Debug, Clone)]
 pub struct Project {
     name: String,
-    created: SystemTime,
-    info: ProjectInfo,
+    created: OffsetDateTime,
+    accessed: OffsetDateTime,
+    tags: HashSet<String>,
 }
 
 impl Project {
-    pub fn new(name: String, created_time: SystemTime, tags: HashSet<String>) -> Self {
-        Self::with_info(
-            name,
-            created_time,
-            ProjectInfo::new(created_time.into(), tags),
-        )
-    }
-    pub fn with_info(name: String, created_time: SystemTime, info: ProjectInfo) -> Self {
-        Project {
+    pub fn new(
+        name: String,
+        created_time: OffsetDateTime,
+        accessed_time: OffsetDateTime,
+        tags: HashSet<String>,
+    ) -> Self {
+        Self {
             name,
             created: created_time,
-            info,
+            accessed: accessed_time,
+            tags,
         }
     }
+
     pub fn get_tags(&self) -> HashSet<String> {
-        self.info.tags.clone()
+        self.tags.clone()
     }
     pub fn get_name(&self) -> &String {
         &self.name
@@ -115,7 +110,19 @@ impl Project {
         self.name = name
     }
     fn modify(&mut self, new_tags: HashSet<String>) {
-        self.info.tags = new_tags
+        self.tags = new_tags
+    }
+    /// Save as ProjectData.
+    /// Also resets accessed_time.
+    fn save_data(&mut self, path: PathBuf) -> Result<(), ProjectError> {
+        self.accessed = OffsetDateTime::now_utc();
+        let data = ProjectData {
+            created: Some(self.created),
+            accessed: Some(self.accessed),
+            tags: self.get_tags(),
+        };
+        data.save(path)?;
+        Ok(())
     }
 }
 
@@ -125,8 +132,7 @@ impl Display for Project {
             f,
             "{}: {}",
             self.name,
-            self.info
-                .tags
+            self.tags
                 .clone()
                 .into_iter()
                 .collect::<Vec<String>>()
@@ -185,19 +191,6 @@ impl ProjectManager {
                 continue;
             }
 
-            let created_time = match entry.metadata() {
-                Err(e) => {
-                    errors.push(ProjectError {
-                        typ: ProjectErrorTypes::DirectoryRead,
-                        msg: format!("Couldn't get metadata for directory {:?}:\n{}\n", path, e),
-                    });
-                    continue;
-                }
-                Ok(m) => m.created().unwrap_or_else(|e| {
-                    panic!("Couldn't get created time for {:?}:\n{}\n", path, e)
-                }),
-            };
-
             let data = match fs::read_to_string(entry.join(PROJECT_FILE)) {
                 Ok(data) => data,
                 Err(e) => {
@@ -209,9 +202,8 @@ impl ProjectManager {
                 }
             };
 
-            let project_info = serde_json::from_str::<ProjectInfo>(&data);
             let name = match entry.file_name().unwrap().to_str() {
-                Some(name) => name,
+                Some(name) => name.to_owned(),
                 None => {
                     errors.push(ProjectError {
                         typ: ProjectErrorTypes::DirectoryRead,
@@ -221,15 +213,48 @@ impl ProjectManager {
                 }
             };
 
-            if let Ok(info) = project_info {
-                manager.tags.extend(info.tags.clone());
-                manager
-                    .projects
-                    .push(Project::with_info(name.into(), created_time, info));
-            } else {
-                println!("WARNING: broken {} at {:?}", PROJECT_FILE, entry);
-            }
+            let project_data = match serde_json::from_str::<ProjectData>(&data) {
+                Ok(data) => data,
+                Err(e) => {
+                    errors.push(ProjectError {
+                        typ: ProjectErrorTypes::ProjectRead,
+                        msg: format!(
+                            "Broken project config at {:?}: \n{}\n",
+                            entry.join(PROJECT_FILE),
+                            e
+                        ),
+                    });
+                    continue;
+                }
+            };
+
+            // I'm calling hoping this by function hoping it doesn't miss a lot
+            let file_metadata = match entry.metadata() {
+                Err(e) => {
+                    errors.push(ProjectError {
+                        typ: ProjectErrorTypes::DirectoryRead,
+                        msg: format!("Couldn't get metadata for directory {:?}:\n{}\n", path, e),
+                    });
+                    continue;
+                }
+                Ok(m) => m,
+            };
+
+            let default_created = file_metadata.created().unwrap_or(SystemTime::UNIX_EPOCH);
+            let created = project_data.created.unwrap_or(default_created.into());
+            let accessed = project_data
+                .accessed
+                .unwrap_or(file_metadata.accessed().unwrap_or(default_created).into());
+
+            manager.tags.extend(project_data.tags.clone());
+            manager.projects.push(Project {
+                name,
+                created,
+                accessed,
+                tags: project_data.tags,
+            });
         }
+
         (manager, errors)
     }
     pub fn get_path(&self, name: &str) -> PathBuf {
@@ -250,7 +275,7 @@ impl ProjectManager {
         let mut res = self.projects.clone();
         match order {
             SortOrder::Creation => res.sort_by_key(|p| Reverse(p.created)),
-            SortOrder::AccessTime => res.sort_by_key(|p| Reverse(p.info.accessed)),
+            SortOrder::AccessTime => res.sort_by_key(|p| Reverse(p.accessed)),
             SortOrder::Name => res.sort_by_key(|p| p.name.clone()),
         };
         res
@@ -299,8 +324,9 @@ impl ProjectManager {
         };
 
         self.tags.extend(tags.clone());
-        let project = Project::new(name, SystemTime::now(), tags);
-        project.info.save(path)?;
+        let time = OffsetDateTime::now_utc();
+        let mut project = Project::new(name, time, time, tags);
+        project.save_data(path)?;
         self.projects.push(project);
         Ok(())
     }
@@ -326,15 +352,14 @@ impl ProjectManager {
             });
         }
         project.rename(dst.to_string());
-        project.info.accessed = OffsetDateTime::now_utc();
-        project.info.save(new_path)?;
+        project.save_data(new_path)?;
         Ok(())
     }
     pub fn modify(&mut self, name: &str, tags: HashSet<String>) -> Result<(), ProjectError> {
         let path: PathBuf = self.get_path(name);
         let project = self.get_mut_project(name)?;
         project.modify(tags.clone());
-        project.info.save(path)?;
+        project.save_data(path)?;
         self.tags.extend(tags);
         Ok(())
     }
@@ -348,8 +373,7 @@ impl ProjectManager {
         let path: PathBuf = self.get_path(name);
         let project = self.get_mut_project(name)?;
 
-        project.info.accessed = OffsetDateTime::now_utc();
-        project.info.save(path.clone())?;
+        project.save_data(path.clone())?; // to reset accessed_time
 
         // we will start a program in project directory and this current
         // rust program might need to wait until the program finishes. so

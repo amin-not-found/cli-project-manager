@@ -3,7 +3,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 pub mod config;
 pub mod project;
 
-fn setup() -> config::Config {
+fn _setup() -> config::Config {
     let mut hasher = DefaultHasher::new();
     std::time::SystemTime::now().hash(&mut hasher);
 
@@ -17,19 +17,19 @@ fn setup() -> config::Config {
     }
 }
 
-fn cleanup(config: config::Config) {
+fn _cleanup(config: config::Config) {
     if config.dir.exists() {
         std::fs::remove_dir_all(config.dir).unwrap();
     }
 }
 
-fn run_test<T>(test: T)
+fn _run_test<T>(test: T)
 where
     T: FnOnce(&config::Config) + std::panic::UnwindSafe,
 {
-    let config = setup();
+    let config = _setup();
     let result = std::panic::catch_unwind(|| test(&config));
-    cleanup(config);
+    _cleanup(config);
     assert!(result.is_ok())
 }
 
@@ -43,7 +43,7 @@ mod tests {
 
     #[test]
     fn non_existing_dir() {
-        run_test(|config| {
+        _run_test(|config| {
             // Non existing root directory
             std::fs::remove_dir(&config.dir).unwrap();
             let (manager, errors) = project::ProjectManager::load(config.dir.clone());
@@ -62,7 +62,7 @@ mod tests {
 
     #[test]
     fn general() {
-        run_test(|config| {
+        _run_test(|config| {
             // empty root directory
             let (mut manager, mut errors) = project::ProjectManager::load(config.dir.clone());
             assert!(
@@ -142,7 +142,7 @@ mod tests {
                 tags
             );
 
-            let mut projects_by_ctime = manager.get_projects(project::SortOrder::Creation);
+            let projects_by_ctime = manager.get_projects(project::SortOrder::Creation);
             assert!(projects_by_ctime.len() == 2 && projects_by_ctime[0].get_name() == "proj1");
 
             let projects_by_name = manager.get_projects(project::SortOrder::Name);
