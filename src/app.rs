@@ -1,11 +1,11 @@
-use std::{collections::HashSet, path::Path, process::exit, time::SystemTime};
+use std::{collections::HashSet, path::Path, process::exit};
 
 use clap::ArgMatches;
 use inquire::{autocompletion::Replacement, validator::Validation, Autocomplete, Select, Text};
 
 use crate::{
     config::Config,
-    project::{Project, ProjectManager, SortOrder},
+    project::{ProjectError, ProjectManager, SortOrder},
 };
 
 #[derive(Clone)]
@@ -37,10 +37,10 @@ impl Autocomplete for Suggester {
     }
 }
 
-fn handle_result<T>(res: Result<T, String>) -> T {
+fn handle_result<T>(res: Result<T, ProjectError>) -> T {
     match res {
         Err(e) => {
-            eprintln!("ERROR: {}", e);
+            eprintln!("ERROR: {}", e.msg);
             exit(-1)
         }
         Ok(value) => value,
@@ -85,14 +85,9 @@ fn choose_tags(manager: &mut ProjectManager, tags: &mut HashSet<String>) {
 
 fn create(mut manager: ProjectManager, args: &ArgMatches) {
     let mut tags = HashSet::<String>::new();
-    let name: &String = args.get_one::<String>("project-name").unwrap();
-    if manager.get_mut_project(name).is_ok() {
-        eprintln!("Such project already exists");
-        return;
-    }
+    let name = args.get_one::<String>("project-name").unwrap();
     choose_tags(&mut manager, &mut tags);
-    let project = Project::new(name.to_owned(), SystemTime::now(), tags);
-    handle_result(manager.create(project));
+    handle_result(manager.create(name.to_owned(), tags));
 }
 
 fn rename(mut manager: ProjectManager, args: &ArgMatches) {
@@ -159,7 +154,11 @@ fn search(mut manager: ProjectManager, default_executor: String, args: &ArgMatch
 }
 
 pub fn handle(conf: Config, matches: ArgMatches) {
-    let manager = ProjectManager::load(Path::new(&conf.dir).to_owned());
+    let (manager, project_errors) = ProjectManager::load(Path::new(&conf.dir).to_owned());
+    for err in project_errors {
+        eprintln!("{}", err.msg)
+    }
+
     if let Some((subcommand, args)) = matches.subcommand() {
         match subcommand {
             "create" => create(manager, args),
