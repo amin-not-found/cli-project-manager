@@ -1,8 +1,7 @@
-use std::{collections::HashSet, path::Path, process::exit};
+use std::{collections::HashSet, path::Path, process::exit, time::SystemTime};
 
 use clap::ArgMatches;
 use inquire::{autocompletion::Replacement, validator::Validation, Autocomplete, Select, Text};
-use time::OffsetDateTime;
 
 use crate::{
     config::Config,
@@ -92,7 +91,7 @@ fn create(mut manager: ProjectManager, args: &ArgMatches) {
         return;
     }
     choose_tags(&mut manager, &mut tags);
-    let project = Project::new(name.to_owned(), OffsetDateTime::now_utc(), tags);
+    let project = Project::new(name.to_owned(), SystemTime::now(), tags);
     handle_result(manager.create(project));
 }
 

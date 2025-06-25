@@ -3,7 +3,7 @@ use core::panic;
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::Reverse, collections::HashSet, fmt::Display, fs, io::Write, path::PathBuf,
-    process::Command,
+    process::Command, time::SystemTime,
 };
 use time::{
     format_description::well_known::{
@@ -29,38 +29,31 @@ pub enum SortOrder {
     Name,
 }
 
+fn default_project_atime() -> OffsetDateTime {
+    OffsetDateTime::UNIX_EPOCH
+}
+
+fn empty_hash_set() -> HashSet<String> {
+    HashSet::new()
+}
+
 #[derive(Serialize, Deserialize, Clone)]
-pub struct Project {
-    name: String,
-    #[serde(with = "time_format")]
-    created: OffsetDateTime,
+pub struct ProjectInfo {
+    #[serde(default = "default_project_atime")]
     #[serde(with = "time_format")]
     accessed: OffsetDateTime,
+    #[serde(default = "empty_hash_set")]
     tags: HashSet<String>,
 }
 
-impl Project {
-    pub fn new(name: String, created_time: OffsetDateTime, tags: HashSet<String>) -> Self {
-        Project {
-            name,
-            created: created_time,
-            accessed: created_time,
+impl ProjectInfo {
+    pub fn new(accessed_time: OffsetDateTime, tags: HashSet<String>) -> Self {
+        ProjectInfo {
+            accessed: accessed_time,
             tags,
         }
     }
-    pub fn get_tags(&self) -> HashSet<String> {
-        self.tags.clone()
-    }
-    pub fn get_name(&self) -> &String {
-        &self.name
-    }
-    fn rename(&mut self, name: String) {
-        self.name = name
-    }
-    fn modify(&mut self, new_tags: HashSet<String>) {
-        self.tags = new_tags
-    }
-    fn save(&self, path: PathBuf) -> Result<(), String> {
+    pub fn save(&self, path: PathBuf) -> Result<(), String> {
         let res = fs::write(
             path.join(PROJECT_FILE),
             serde_json::to_string(self).unwrap(),
@@ -72,13 +65,50 @@ impl Project {
     }
 }
 
+#[derive(Clone)]
+pub struct Project {
+    name: String,
+    created: SystemTime,
+    info: ProjectInfo,
+}
+
+impl Project {
+    pub fn new(name: String, created_time: SystemTime, tags: HashSet<String>) -> Self {
+        Self::wih_info(
+            name,
+            created_time,
+            ProjectInfo::new(created_time.into(), tags),
+        )
+    }
+    pub fn wih_info(name: String, created_time: SystemTime, info: ProjectInfo) -> Self {
+        Project {
+            name,
+            created: created_time,
+            info,
+        }
+    }
+    pub fn get_tags(&self) -> HashSet<String> {
+        self.info.tags.clone()
+    }
+    pub fn get_name(&self) -> &String {
+        &self.name
+    }
+    fn rename(&mut self, name: String) {
+        self.name = name
+    }
+    fn modify(&mut self, new_tags: HashSet<String>) {
+        self.info.tags = new_tags
+    }
+}
+
 impl Display for Project {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{}: {}",
             self.name,
-            self.tags
+            self.info
+                .tags
                 .clone()
                 .into_iter()
                 .collect::<Vec<String>>()
@@ -97,28 +127,43 @@ impl ProjectManager {
     pub fn load(path: PathBuf) -> Self {
         let mut projects = Vec::<Project>::new();
         let mut tags = HashSet::<String>::new();
-        if !path.is_dir() {
-            panic!("Root directory({path:?}) not found or not a directory!");
-        }
 
-        for entry in fs::read_dir(&path).unwrap() {
+        let entries = fs::read_dir(&path)
+            .unwrap_or_else(|e| panic!("Couldn't read root directory({:?}). Error:\n{}", path, e));
+
+        for entry in entries {
             let entry = entry.unwrap().path();
-            if entry.is_dir()
-                && entry
-                    .read_dir()
-                    .unwrap()
-                    .any(|f| f.unwrap().file_name() == PROJECT_FILE)
+
+            if !entry.is_dir() {
+                continue;
+            }
+            if !entry
+                .read_dir()
+                .unwrap()
+                .any(|f| f.is_ok_and(|f| f.file_name() == PROJECT_FILE))
             {
-                let data = fs::read_to_string(entry.join(PROJECT_FILE)).unwrap_or_else(|e| {
-                    panic!("Couldn't read {} in {:?}: {}", PROJECT_FILE, entry, e)
+                continue;
+            }
+
+            let created_time = entry
+                .metadata()
+                .unwrap()
+                .created()
+                .unwrap_or_else(|e| panic!("Couldn't get created time for {:?}: {}", entry, e));
+
+            let data = fs::read_to_string(entry.join(PROJECT_FILE))
+                .unwrap_or_else(|e| panic!("Couldn't read {} in {:?}: {}", PROJECT_FILE, entry, e));
+
+            let project_info = serde_json::from_str::<ProjectInfo>(&data);
+            let name =
+                entry.file_name().unwrap().to_str().unwrap_or_else(|| {
+                    panic!("Non UTF-8 paths aren't supported(path: {:?})", path)
                 });
-                let project = serde_json::from_str::<Project>(&data);
-                if let Ok(p) = project {
-                    tags.extend(p.tags.clone());
-                    projects.push(p);
-                } else {
-                    println!("WARNING: broken {} at {:?}", PROJECT_FILE, entry);
-                }
+            if let Ok(info) = project_info {
+                tags.extend(info.tags.clone());
+                projects.push(Project::wih_info(name.into(), created_time, info));
+            } else {
+                println!("WARNING: broken {} at {:?}", PROJECT_FILE, entry);
             }
         }
         Self {
@@ -142,7 +187,7 @@ impl ProjectManager {
         let mut res = self.projects.clone();
         match order {
             SortOrder::Creation => res.sort_by_key(|p| Reverse(p.created)),
-            SortOrder::AccessTime => res.sort_by_key(|p| Reverse(p.accessed)),
+            SortOrder::AccessTime => res.sort_by_key(|p| Reverse(p.info.accessed)),
             SortOrder::Name => res.sort_by_key(|p| p.name.clone()),
         };
         res
@@ -170,7 +215,7 @@ impl ProjectManager {
             .open(path.join(path.join(".gitignore")))
             .unwrap();
         writeln!(gitignore, "{}", PROJECT_FILE).unwrap();
-        project.save(path)?;
+        project.info.save(path)?;
         Ok(())
     }
     pub fn rename(&mut self, src: &str, dst: &str) -> Result<(), String> {
@@ -189,7 +234,7 @@ impl ProjectManager {
         fs::rename(path.clone(), &new_path)
             .unwrap_or_else(|e| panic!("Couldn't rename {:?} to {:?}.\n{}", &path, &new_path, e));
         project.rename(dst.to_string());
-        project.save(new_path)?;
+        project.info.save(new_path)?;
         self.projects.push(project);
         Ok(())
     }
@@ -197,7 +242,7 @@ impl ProjectManager {
         let path: PathBuf = self.get_path(name);
         let project = self.get_mut_project(name)?;
         project.modify(tags);
-        project.save(path)?;
+        project.info.save(path)?;
         Ok(())
     }
     pub fn exec(mut self, name: &str, default_executor: String, cmd: &str) -> Result<(), String> {
@@ -205,8 +250,8 @@ impl ProjectManager {
         let path: PathBuf = self.get_path(name);
         let project = self.get_mut_project(name)?;
 
-        project.accessed = OffsetDateTime::now_utc();
-        project.save(path.clone())?;
+        project.info.accessed = OffsetDateTime::now_utc();
+        project.info.save(path.clone())?;
 
         // we will start a program in project directory and this current
         // rust program might need to wait until the program finishes. so
@@ -216,7 +261,11 @@ impl ProjectManager {
         if cmd.is_empty() {
             cmd = &default_executor;
         }
-        let cmd = cmd.replace("{}", &path.to_string_lossy());
+        let cmd = cmd.replace(
+            "{}",
+            path.to_str()
+                .unwrap_or_else(|| panic!("Non UTF-8 paths aren't supported(path: {:?})", path)),
+        );
         let cmd: Vec<&str> = cmd.split(' ').collect();
         Command::new(cmd[0])
             .args(&cmd[1..])
